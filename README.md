@@ -18,6 +18,7 @@
 
 ## Output
 Tab-delimited data are printed to standard out with the following fields:
+
 1. antimicrobial resistance gene name (from database)
 2. sequence defline/header where the antimicrobial resistance gene is located (from genome)
 3. % nucleotide similarity
