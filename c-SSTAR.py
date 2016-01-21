@@ -8,6 +8,7 @@ def parseArgs(args=None):
 	parser = argparse.ArgumentParser(description='c-SSTAR is a CLI utility for rapidly identifying antibiotic resistance gene determinants in bacterial genomes')
 	parser.add_argument('-d', '--database', required=True, help='a SSTAR-formatted FastA database of AR gene sequences')
 	parser.add_argument('-g', '--genome', required=True, help='a FastA genome')
+	parser.add_argument('-b', '--basename', help='basename of output files')
 	parser.add_argument('-o', '--outdir', default=os.getcwd(), help='output directory')
 	parser.add_argument('-s', '--similarity', type=int, default=95, help='minimum percent nucleotide similarity')
 	return parser.parse_args()
@@ -58,7 +59,10 @@ def main(args=None):
 	args = parseArgs()
 	outdir = args.outdir
 	genome = args.genome
-	baseGenome = os.path.splitext(os.path.basename(genome))[0]
+	if args.basename is not None:
+		baseGenome = args.basename
+	else:
+		baseGenome = os.path.splitext(os.path.basename(genome))[0]
 	if not os.path.exists(outdir): 
 		os.mkdir(outdir)
 	logging.basicConfig(filename='%s/c-SSTAR_%s.log' % (outdir, baseGenome), format='%(asctime)s: %(levelname)s: %(message)s', datefmt='%d-%m-%Y %I:%M:%S %p', level=logging.INFO)
