@@ -56,26 +56,26 @@ sed -i 's/TR$//g' Summary_TruncatedPorins_AR_hits.tab; sed -i 's/,$//g' Summary_
 ## Example Summary Output
 |AR_Family | AR_Variant | Query_Defline/Header | Similarity | Align_Len | DB_Gene_Len|
 |--------------------|---------|-----------------|-----------|---------|--------------|
-|AmpH_Bla__*__ | AmpH__*__ | SAMN04014950_3 | 98% | 1161 | 1161|
-|Aac3-Ib_AGly__?__ | Aac3-Ib-Aac6-Ib__?__ | SAMN04014950_94 | 99% | 554 | 1005|
+|AmpH_Bla* | AmpH* | SAMN04014950_3 | 98% | 1161 | 1161|
+|Aac3-Ib_AGly? | Aac3-Ib-Aac6-Ib? | SAMN04014950_94 | 99% | 554 | 1005|
 |MphA_MLS | MphA | SAMN04014950_85 | 100% | 906 | 906|
 |SHV-OKP-LEN_Bla | SHV-11 | SAMN04014950_2 | 100% | 861 | 861|
 |CTX-M-1_Bla | CTX-M-15 | SAMN04014950_84 | 100% | 876 | 876|
-|Aac3-IIa_AGly__*__ | Aac3-IIa__*__ | SAMN04014950_122 | 98% | 861 | 861|
-|TEM-1D_Bla__*__ | TEM-105__*__ | SAMN04014950_112 | 99% | 861 | 861|
+|Aac3-IIa_AGly* | Aac3-IIa* | SAMN04014950_122 | 98% | 861 | 861|
+|TEM-1D_Bla* | TEM-105* | SAMN04014950_112 | 99% | 861 | 861|
 |SulI_Sul | SulI | SAMN04014950_91 | 100% | 840 | 840|
-|StrB_AGly__*__ | StrB__*__ | SAMN04014950_69 | 99% | 837 | 837|
-|AadA_AGly__*__ | AadA2__*__ | SAMN04014950_91 | 99% | 780 | 780|
+|StrB_AGly* | StrB* | SAMN04014950_69 | 99% | 837 | 837|
+|AadA_AGly* | AadA2* | SAMN04014950_91 | 99% | 780 | 780|
 |OXA-1_Bla | OXA-1 | SAMN04014950_94 | 100% | 831 | 831|
 |SulII_Sul | SulII | SAMN04014950_69 | 100% | 816 | 816|
-|StrA_AGly__*__ | StrA__*__ | SAMN04014950_69 | 99% | 804 | 804|
-|QnrB_Flq__?__ | QnrB1__?__ | SAMN04014950_79 | 100% | 662 | 681|
-|CatA2_Phe__*__ | CatA2__*__ | SAMN04014950_101 | 96% | 642 | 642|
-|CatBx_Phe__?__ | CatB4__?__ | SAMN04014950_94 | 100% | 529 | 549|
+|StrA_AGly* | StrA* | SAMN04014950_69 | 99% | 804 | 804|
+|QnrB_Flq? | QnrB1? | SAMN04014950_79 | 100% | 662 | 681|
+|CatA2_Phe* | CatA2* | SAMN04014950_101 | 96% | 642 | 642|
+|CatBx_Phe? | CatB4? | SAMN04014950_94 | 100% | 529 | 549|
 |DfrA_Tmt | DfrA12 | SAMN04014950_118 | 100% | 498 | 498|
 |DfrA5_Tmt | DfrA14 | SAMN04014950_116 | 100% | 474 | 474|
-|OmpK35-kpneumoniae__*__ | ompK35__*__ | SAMN04014950_14 | 99% | 1080 | 1080|
-|OmpK36-kpneumoniae__*TR__ | ompK36__*TR__ | SAMN04014950_1 | 99% | 1099 | 1099|
+|OmpK35-kpneumoniae* | ompK35* | SAMN04014950_14 | 99% | 1080 | 1080|
+|OmpK36-kpneumoniae*TR | ompK36*TR | SAMN04014950_1 | 99% | 1099 | 1099|
 
 ### Literature References
 _Tom's SSTAR paper:_ de Man TJB, Limbago BM. 2016. SSTAR, a stand-alone easy-to-use antimicrobial resistance gene predictor. mSphere 1(1): e00050-15. doi: 10.1128/mSphere.00050-15
