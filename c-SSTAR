@@ -19,6 +19,7 @@ def parseArgs(args=None):
 	parser.add_argument('-b', '--basename', help='basename of output files')
 	parser.add_argument('-o', '--outdir', default=os.getcwd(), help='output directory')
 	parser.add_argument('-s', '--similarity', type=int, default=95, help='minimum percent nucleotide similarity')
+	parser.add_argument('-v', '--version', action='version', version='%(prog)s v{}'.format(__version__))
 	return parser.parse_args()
 
 def syscall(syscmd):
