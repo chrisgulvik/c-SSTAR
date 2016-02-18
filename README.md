@@ -11,7 +11,7 @@
 - Python and Biopython
 
 ## Usage
-    python c-SSTAR.py -g <genome_file> -d <database_file>
+    python c-SSTAR -g <genome_file> -d <database_file>
 
 ## Input
 1. FastA formatted genome
@@ -46,7 +46,7 @@ A text file is generated to log the date and time of execution, user ID, shell e
 
 ## Example Usage
 ###### Run c-SSTAR on several genomes with both databases
-`cd ~/genomes && for F in *.fna; do B=$(basename $F .fna); B1="$B"_ARG-ANNOT; B2="$B"_ResFinder; python ~/c-SSTAR/c-SSTAR.py -g $F -b $B1 -d ~/AR/ARG-ANNOT.srst2.fasta -o AR/"$B" > AR/"$B"_"$D1".tab; python ~/c-SSTAR/c-SSTAR.py -g $F -b $B2 -d ~/AR/ResFinder_12-14-2015.srst2.fasta -o AR/"$B" > AR/"$B"_"$D2".tab; done`
+`cd ~/genomes && for F in *.fna; do B=$(basename $F .fna); B1="$B"_ARG-ANNOT; B2="$B"_ResFinder; python ~/c-SSTAR/c-SSTAR -g $F -b $B1 -d ~/AR/ARG-ANNOT.srst2.fasta -o AR/"$B" > AR/"$B"_"$D1".tab; python ~/c-SSTAR/c-SSTAR -g $F -b $B2 -d ~/AR/ResFinder_12-14-2015.srst2.fasta -o AR/"$B" > AR/"$B"_"$D2".tab; done`
 ###### Filter for full-length hits without protein truncations
 `for F in *_ARG-ANNOT.tab; do B=$(basename $F _ARG-ANNOT.tab); echo -ne "$B\t" >> Summary_FullLength_AR_hits.tab; grep -v -e $'TR\t' -e '[Oo]mp' $F | awk '$5 == $6 {print $2}' | sed 's/[\?\*]//1' | tr '\n' ',' >> Summary_FullLength_AR_hits.tab; echo '' >> Summary_FullLength_AR_hits.tab; done; sed -i 's/,$//g' Summary_FullLength_AR_hits.tab`
 ###### Filter for truncated porins
