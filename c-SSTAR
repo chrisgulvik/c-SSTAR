@@ -1,6 +1,6 @@
 #!/usr/bin/env python
 
-__version__ = '1.2b'
+__version__ = '1.2c'
 
 import argparse
 import logging
@@ -115,7 +115,7 @@ def main(args=None):
 				bitscore = blastOut[11]
 				candidate = [clusterNr, enzymeParts[1], enzymeParts[2], blastOut[1], pident, blastOut[3], bitscore, blastOut[12], blastOut[6], blastOut[7], blastOut[13], blastOut[14].rstrip()]
 				if clusterNr == currentClusterNr:
-					if int(best[6]) < int(candidate[6]):
+					if float(best[6]) < float(candidate[6]):
 						best = candidate
 				else:
 					if best[4] >= similarity:
