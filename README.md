@@ -14,6 +14,7 @@
     python c-SSTAR -g <genome_file> -d <database_file>
 
 ## Input
+
 1. FastA formatted genome
 2. FastA database of antimicrobial resistance (AR) gene sequences from SSTAR. Two databases are available ([ARG-ANNOT](https://github.com/tomdeman-bio/Sequence-Search-Tool-for-Antimicrobial-Resistance-SSTAR-/raw/master/ARG-ANNOT.srst2.fasta) or [ResFinder](https://github.com/tomdeman-bio/Sequence-Search-Tool-for-Antimicrobial-Resistance-SSTAR-/raw/master/ResFinder_12-14-2015.srst2.fasta)), which are formatted according to Kat Holt's clustering approach for [SRST2](https://github.com/katholt/srst2/tree/master/database_clustering)
 
@@ -31,6 +32,7 @@ Columns 1 and 2 will have suffixes appended to denote special interest:
 - __*__  indicates the best scoring allele is full-length but has >=1 mismatch (SNP). This often means you have a novel allele.
 - __?__  indicates uncertainty in the result due to incomplete length alignment
 - __TR__ indicates truncation due to an internal stop codon being present
+- __$__ indicates gene detected at edge of contig
 
 #### II) Raw blastn output (OUTDIR/BASENAME.blastn.tsv)
 The tab-delimited outfmt 6 of blast is saved with two columns added to the right. Column 13 is the query length, and column 14 is the subject sequence.
