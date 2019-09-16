@@ -8,15 +8,15 @@
 ## System Requirements
 - Linux or Mac OS X platform
 - BLAST+ (blastn and makeblastdb)
-- Python and Biopython
+- Python 2.7 and Biopython
 
 ## Usage
-    python c-SSTAR -g <genome_file> -d <database_file>
+    c-SSTAR -g <genome_file> -d <database_file>
 
 ## Input
 
 1. FastA formatted genome
-2. FastA database of antimicrobial resistance (AR) gene sequences from SSTAR. Two databases are available ([ARG-ANNOT](https://github.com/tomdeman-bio/Sequence-Search-Tool-for-Antimicrobial-Resistance-SSTAR-/raw/master/ARG-ANNOT.srst2.fasta) or [ResFinder](https://github.com/tomdeman-bio/Sequence-Search-Tool-for-Antimicrobial-Resistance-SSTAR-/raw/master/ResFinder_12-14-2015.srst2.fasta)), which are formatted according to Kat Holt's clustering approach for [SRST2](https://github.com/katholt/srst2/tree/master/database_clustering)
+2. FastA database of antimicrobial resistance (AR) gene sequences from SSTAR. Two databases are available ([ARG-ANNOT](https://github.com/tomdeman-bio/Sequence-Search-Tool-for-Antimicrobial-Resistance-SSTAR-/blob/master/Manuscript_databases/ARG-ANNOT.srst2.fasta) or [ResFinder](https://github.com/tomdeman-bio/Sequence-Search-Tool-for-Antimicrobial-Resistance-SSTAR-/blob/master/Manuscript_databases/Resfinder.srst2.fasta)), which are formatted according to Kat Holt's clustering approach for [SRST2](https://github.com/katholt/srst2/tree/master/database_clustering). A combination of these two databases also exists ["ResGANNOT"](https://github.com/tomdeman-bio/Sequence-Search-Tool-for-Antimicrobial-Resistance-SSTAR-/blob/master/Latest_AR_database/ResGANNOT_srst2.fasta)
 
 ## Output
 #### I) Summary output (to stdout)
@@ -34,7 +34,7 @@ Columns 1 and 2 will have suffixes appended to denote special interest:
 - __TR__ indicates truncation due to an internal stop codon being present
 - __$__ indicates gene detected at edge of contig
 
-#### II) Raw blastn output (OUTDIR/BASENAME.blastn.tsv)
+#### II) Raw alignment output (OUTDIR/BASENAME.blastn.tsv)
 The tab-delimited outfmt 6 of blast is saved with two columns added to the right. Column 13 is the query length, and column 14 is the subject sequence.
 
 #### III) Log output (OUTDIR/c-SSTAR_BASENAME.log)
@@ -44,16 +44,37 @@ A text file is generated to log the date and time of execution, user ID, shell e
     cd $HOME
     pip install biopython
     git clone https://github.com/chrisgulvik/c-SSTAR.git
-    echo 'export PATH="$PATH:$HOME/c-SSTAR"' >> $HOME/.bash_profile    
+    echo 'export PATH="$PATH:$HOME/c-SSTAR"' >> $HOME/.bash_profile
 
 ## Example Usage
-###### Run c-SSTAR on several genomes with both databases
-`cd ~/genomes && for F in *.fna; do B=$(basename $F .fna); B1="$B"_ARG-ANNOT; B2="$B"_ResFinder; python ~/c-SSTAR/c-SSTAR -g $F -b $B1 -d ~/AR/ARG-ANNOT.srst2.fasta -o AR/"$B" > AR/"$B"_"$D1".tab; python ~/c-SSTAR/c-SSTAR -g $F -b $B2 -d ~/AR/ResFinder_12-14-2015.srst2.fasta -o AR/"$B" > AR/"$B"_"$D2".tab; done`
+###### Run c-SSTAR on several genomes with the combo database
+```bash
+for F in *.fna; do
+  B=$(basename $F .fna)
+  c-SSTAR -g $F -b "$B"_ResGANNOT -d ~/AR/ResGANNOT_srst2.fasta -o AR/"$B" > AR/"$B"_ResGANNOT.tab
+done
+```
 ###### Filter for full-length hits without protein truncations
-`for F in *_ARG-ANNOT.tab; do B=$(basename $F _ARG-ANNOT.tab); echo -ne "$B\t" >> Summary_FullLength_AR_hits.tab; grep -v -e $'TR\t' -e '[Oo]mp' $F | awk '$5 == $6 {print $2}' | sed 's/[\?\*]//1' | tr '\n' ',' >> Summary_FullLength_AR_hits.tab; echo '' >> Summary_FullLength_AR_hits.tab; done; sed -i 's/,$//g' Summary_FullLength_AR_hits.tab`
+```bash
+for F in *_ResGANNOT.tab; do
+  B=$(basename $F _ResGANNOT.tab)
+  echo -ne "$B\t" >> Summary_FullLength_AR_hits.tab
+  grep -v -e $'TR\t' -e '[Oo]mp' $F | awk '$5 == $6 {print $2}' | sed 's/[\?\*]//1' | tr '\n' ',' >> Summary_FullLength_AR_hits.tab
+  echo '' >> Summary_FullLength_AR_hits.tab
+done
+sed -i 's/,$//g' Summary_FullLength_AR_hits.tab
+```
 ###### Filter for truncated porins
-`for F in *_ARG-ANNOT.tab; do B=$(basename $F _ARG-ANNOT.tab); echo -ne "$B\t" >> Summary_TruncatedPorins_AR_hits.tab; grep -P 'TR\t' $F | awk '/[Oo]mp/ && /TR\t/ {print $2}' | sed 's/[\?\*]//1' | tr '\n' ',' >> Summary_TruncatedPorins_AR_hits.tab; echo '' >> Summary_TruncatedPorins_AR_hits.tab; done;
-sed -i 's/TR$//g' Summary_TruncatedPorins_AR_hits.tab; sed -i 's/,$//g' Summary_TruncatedPorins_AR_hits.tab`
+```bash
+for F in *_ResGANNOT.tab; do
+  B=$(basename $F _ResGANNOT.tab)
+  echo -ne "$B\t" >> Summary_TruncatedPorins_AR_hits.tab
+  grep -P 'TR\t' $F | awk '/[Oo]mp/ && /TR\t/ {print $2}' | sed 's/[\?\*]//1' | tr '\n' ',' >> Summary_TruncatedPorins_AR_hits.tab
+  echo '' >> Summary_TruncatedPorins_AR_hits.tab
+done
+sed -i 's/TR$//g' Summary_TruncatedPorins_AR_hits.tab
+sed -i 's/,$//g' Summary_TruncatedPorins_AR_hits.tab
+```
 
 ## Example Summary Output
 |AR_Family | AR_Variant | Query_Defline/Header | Similarity | Align_Len | DB_Gene_Len|
@@ -80,8 +101,10 @@ sed -i 's/TR$//g' Summary_TruncatedPorins_AR_hits.tab; sed -i 's/,$//g' Summary_
 |OmpK36-kpneumoniae*TR | ompK36*TR | SAMN04014950_1 | 99% | 1099 | 1099|
 
 ### Literature References
-_Tom's SSTAR paper:_ de Man TJB, Limbago BM. 2016. SSTAR, a stand-alone easy-to-use antimicrobial resistance gene predictor. mSphere 1(1): e00050-15. doi: 10.1128/mSphere.00050-15
+[_SSTAR_](https://www.ncbi.nlm.nih.gov/pmc/articles/PMC4863618/): de Man TJB, Limbago BM. 2016. SSTAR, a stand-alone easy-to-use antimicrobial resistance gene predictor. mSphere 1(1): e00050-15. doi: 10.1128/mSphere.00050-15
 
-_the ARG-ANNOT database:_ Gupta SK, Padmanabhan BR, Diene SM, Lopez-Rojas R, Kempf M, Landraud L, Rolain J-M. 2014. ARG-ANNOT (Antibiotic Resistance Gene-ANNOTation), a new bioinformatic tool to discover antibiotic resistance genes in bacterial genomes. Antimicrobial Agents and Chemotherapy 58:212–220. doi: 10.1128/AAC.01310-13
+[_c-SSTAR_](https://www.ncbi.nlm.nih.gov/pmc/articles/PMC5442553/): Cunningham SA, Limbago B, Traczewski M, Anderson K, Hackel M, Hindler J, Sahm D, Alyanak E, Lawsin A, Gulvik CA, de Man TJB, Mandrekar JN, Schuetz AN, Jenkins S, Humphries R, Palavecino E, Vasoo S, Patel R. 2017. Multicenter Performance Assessment of Carba NP Test. J Clin Microbiol 55(6):1954-1960. doi: 10.1128/JCM.00244-17
 
-_the ResFinder database:_ Zankari E, Hasman H, Cosentino S, Vestergaard M, Rasmussen S, Lund O, Aarestrup F, Larsen MV. 2012. Identification of acquired antimicrobial resistance genes. Journal of Antimicrobial Chemotherapy 67:2640–2644. doi: 10.1093/jac/dks261
+[_the ARG-ANNOT database_](https://www.ncbi.nlm.nih.gov/pmc/articles/PMC3910750/): Gupta SK, Padmanabhan BR, Diene SM, Lopez-Rojas R, Kempf M, Landraud L, Rolain J-M. 2014. ARG-ANNOT (Antibiotic Resistance Gene-ANNOTation), a new bioinformatic tool to discover antibiotic resistance genes in bacterial genomes. Antimicrobial Agents and Chemotherapy 58:212–220. doi: 10.1128/AAC.01310-13
+
+[_the ResFinder database_](https://www.ncbi.nlm.nih.gov/pmc/articles/PMC3468078/): Zankari E, Hasman H, Cosentino S, Vestergaard M, Rasmussen S, Lund O, Aarestrup F, Larsen MV. 2012. Identification of acquired antimicrobial resistance genes. Journal of Antimicrobial Chemotherapy 67:2640–2644. doi: 10.1093/jac/dks261
