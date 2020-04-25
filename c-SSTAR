@@ -24,13 +24,13 @@ def parseArgs():
 	parser.add_argument('-o', '--outdir', default=os.getcwd(),
 		help='output directory [default: cwd]')
 	parser.add_argument('-s', '--similarity', type=int, default=95,
-		help='minimum percent nucleotide similarity [default: 95]')
+		help='minimum percent nucleotide similarity [default: %(default)s]')
 	parser.add_argument('-e', '--edge', type=int, default=50,
 		help='number of bases at each contig edge to report as \'$\''
-		' for end [default 50]')
+		' for end [default %(default)s]')
 	parser.add_argument('-v', '--version', action='version',
 		version='%(prog)s v{}'.format(__version__))
-	return parser.parse_args()
+	return parser.parseArgs()
 
 def syscall(syscmd):
 	with open(os.devnull) as dump: 
@@ -38,17 +38,18 @@ def syscall(syscmd):
 			shell=True)
 		if returncode != 0:
 			logging.error('failed syscall ' + syscmd)
-			sys.exit('ERROR: failed syscall ' + syscmd)
+			sys.stderr.write('ERROR: failed syscall {}\n'.format(syscmd))
+			sys.exit(1)
 
 def translateSeq(nuclSeq):
-	'''use biopython to take in a nucleotide sequence (string) and 
+	'''use biopython to take in a nucleotide sequence (string) and
 	return a protein sequence'''
 	proteinSeq = Seq(nuclSeq, generic_dna).translate(cds=False, to_stop=False,
 		stop_symbol='*')
 	return proteinSeq
 
 def internalSTOPcodon(candidate):
-	'''counts number of internal stop codons; requires sequence from database 
+	'''counts number of internal stop codons; requires sequence from database
 	to be in frame'''
 	if '-' in candidate[11]:
 		nucSeq = candidate[11].replace('-', '')
@@ -67,8 +68,9 @@ def internalSTOPcodon(candidate):
 	elif len(nucSeq) % 3 > 0:
 		protein = translateSeq(nucSeq[:-(len(nucSeq) % 3)])
 	else:
-		sys.exit('ERROR: incorrect nucleotide length ({}) after trimming'.\
-			format(len(nucSeq)))
+		sys.stderr.write('ERROR: incorrect nucleotide length ({}) after'
+		' trimming\n'.format(len(nucSeq)))
+		sys.exit(1)
 	numInternalSTOPcodons = len(re.findall(r'\*[ABCDEFGHIKLMNPQRSTVWYZ]',
 		str(protein)))
 	return (protein, str(numInternalSTOPcodons))
@@ -113,8 +115,8 @@ def main():
 		baseGenome = os.path.splitext(os.path.basename(genome))[0]
 	if not os.path.exists(outdir): 
 		os.mkdir(outdir)
-	logging.basicConfig(filename='{}/c-SSTAR_{}.log'.format(
-		outdir, baseGenome),
+	logging.basicConfig(
+		filename=os.path.join(outdir, 'c-SSTAR_{}.log'.format(baseGenome))
 		format='%(asctime)s: %(levelname)s: %(message)s',
 		datefmt='%d-%m-%Y %I:%M:%S %p', level=logging.INFO)
 	logging.info('c-SSTAR version: {}'.format(__version__))
