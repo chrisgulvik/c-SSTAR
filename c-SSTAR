@@ -1,213 +1,391 @@
 #!/usr/bin/env python
 
-__version__ = '1.3.0'
+__version__ = '2.0.0'
 
 import argparse
+import gzip
 import logging
 import os
 import pwd
 import re
+import shutil
 import subprocess
 import sys
+from collections import Counter
+from tempfile import mkdtemp
 from multiprocessing import cpu_count
 
-from Bio.Seq import Seq
+from Bio import SeqIO
 from Bio.Alphabet import generic_dna
+from Bio.Seq import Seq
+from Bio.SeqUtils import GC
+
 
 def parse_args():
-	parser = argparse.ArgumentParser(description='c-SSTAR is a CLI utility'
-		' for rapidly identifying antibiotic resistance gene determinants in'
-		' bacterial genomes')
-	parser.add_argument('-d', '--database', required=True, metavar='FILE',
-		help='a SSTAR-formatted FastA database of AR gene sequences')
-	parser.add_argument('-g', '--genome', required=True, metavar='FILE',
-		help='a FastA genome')
-	parser.add_argument('-b', '--basename', type=str, metavar='STR',
-		help='output file prefix')
-	parser.add_argument('-c', '--cpus', type=int, metavar='INT',
-		default=cpu_count(),
-		help='number of threads for BLASTn to use [default: %(default)s]')
-	parser.add_argument('-o', '--outdir', type=str, metavar='PATH',
-		default=os.getcwd(),
-		help='output directory [default: cwd]')
-	parser.add_argument('-s', '--similarity', type=int, metavar='INT',
-		default=95,
-		help='minimum percent nucleotide similarity [default: %(default)s]')
-	parser.add_argument('-e', '--edge', type=int, default=50, metavar='INT',
-		help='number of bases at each contig edge to report as \'$\''
-		' for end [default %(default)s]')
-	parser.add_argument('-v', '--version', action='version',
-		version='%(prog)s v{}'.format(__version__))
-	return parser.parse_args()
+    parser = argparse.ArgumentParser(
+        description='c-SSTAR is a CLI utility'
+        ' for rapidly identifying antibiotic resistance gene determinants in'
+        ' bacterial genomes', add_help=False,
+        epilog='NOTE: report output places special characters on alignments'
+        ' to denote special interest. * is >=1 mismatch, ? is incomplete'
+        ' align length, TR is truncation predicted with internal stop codon,'
+        ' and $ is aligned at contig edge')
+    req = parser.add_argument_group('Required Input')
+    req.add_argument(
+        '-d', '--database', required=True, metavar='FILE',
+        help='a SSTAR-formatted FastA database of AR gene sequences,'
+        ' optionally gunzip compressed')
+    req.add_argument(
+        '-g', '--genome', required=True, metavar='FILE',
+        help='query genome in FastA or GenBank format, optionally gunzip'
+        ' compressed')
+    aln = parser.add_argument_group('Alignment Options')
+    aln.add_argument(
+        '--cpus', type=require_int_nonnegative,
+        metavar='INT', default=cpu_count(),
+        help='threads for BLASTn to use [%(default)s]')
+    aln.add_argument(
+        '--min-aln-frac', type=require_float_1_to_100,
+        default=40, metavar='FLOAT',
+        help='minimum database alignment length percentage [%(default)s]')
+    aln.add_argument(
+        '--min-identity', type=require_float_1_to_100,
+        metavar='FLOAT', default=95,
+        help='minimum alignment nucleotide identity [%(default)s]')
+    opt = parser.add_argument_group('I/O Options')
+    opt.add_argument(
+        '--basename', type=str, metavar='STR',
+        help='output file base identifier [basename <genome>]')
+    opt.add_argument(
+        '--edge', type=require_int_nonnegative,
+        default=50, metavar='INT',
+        help='label alignments at edge of contig (bp) [%(default)s]')
+    opt.add_argument(
+        '--min-ACGT', type=require_float_1_to_100, metavar='FLOAT',
+        default=97,
+        help='minimum ACGT percent in each input file to align [%(default)s]')
+    opt.add_argument(
+        '--outdir', type=str, metavar='PATH',
+        default=os.getcwd(),
+        help='output path [cwd]')
+    opt.add_argument(
+        '--report', default=None, metavar='FILE',
+        help='summary tab-delimited report [stdout]')
+    msc = parser.add_argument_group('Misc Options')
+    msc.add_argument(
+        '-h', '--help', action='help',
+        help='show this help message and exit')
+    msc.add_argument(
+        '-v', '--version', action='version',
+        version='%(prog)s v{}'.format(__version__))
+    return parser.parse_args()
+
+
+def require_int_nonnegative(x):
+    try:
+        if int(x) < 0 or '.' in str(x):
+            sys.stderr.write(
+                'ERROR: {} must be a non-negative integer\n'.
+                format(x))
+            sys.exit(1)
+    except ValueError:
+        sys.stderr.write('ERROR: {} must be an integer\n'.format(x))
+        sys.exit(1)
+    return int(x)
+
+
+def require_float_1_to_100(x):
+    try:
+        x = float(x)
+        if 1 < x > 100:
+            sys.stderr.write('ERROR: {} must be in 1, 100 range\n'.format(x))
+            sys.exit(1)
+    except ValueError:
+        sys.stderr.write('ERROR: {} must be a float\n'.format(x))
+        sys.exit(1)
+    return x
+
+
+def require_dependency(dep):
+    for path in os.environ.get('PATH', '').split(':'):
+        dep_path = os.path.join(path, dep)
+        if os.path.exists(dep_path) and not os.path.isdir(dep_path):
+            return True
+    sys.stderr.write('ERROR: {} unavailable; not in $PATH\n'.format(dep))
+    sys.exit(1)
+
+
+def decompress_file(infile, outdir):
+    uncompressed_file = os.path.basename(infile).rstrip('.gz')
+    outfile = os.path.join(outdir, uncompressed_file)
+    with gzip.open(infile, 'rb') as ifh, open(outfile, 'wb') as ofh:
+        shutil.copyfileobj(ifh, ofh)
+    return outfile
+
+
+def genbank_to_fasta(infile, outdir):
+    fasta_file = os.path.basename(infile).rsplit('.', 1)[0] + '.fa'
+    outfile = os.path.join(outdir, fasta_file)
+    records = []
+    for rec in SeqIO.parse(infile, 'genbank'):
+        if float(GC(rec.seq)) == 0:
+            sys.stderr.write('ERROR: {} appears to lack nucleotides'.
+                             format(rec.name))
+            sys.exit(1)
+        records.append(rec)
+    with open(outfile, 'w') as ofh:
+        SeqIO.write(records, ofh, 'fasta')
+    return outfile
+
+
+def evaluate_nucleotide_composition(infile, min_ACGT):
+    min_ACGT /= 100.
+    seqlen, c = 0, Counter()
+    for rec in SeqIO.parse(infile, 'fasta'):
+        seqlen += len(rec.seq)
+        c += Counter(list(rec.seq.upper()))
+    ACGT_fraction = float(c['A'] + c['C'] + c['G'] + c['T']) / seqlen
+    if ACGT_fraction < min_ACGT:
+        sys.stderr.write('ERROR: low composition ({:.1f}%) of unambiguous '
+                         'nucleotides in {}\n'.
+                         format(ACGT_fraction * 100, os.path.basename(infile)))
+        sys.exit(1)
+    if ACGT_fraction != 1.:
+        sys.stderr.write(
+            'WARNING: {:.6f}% ambiguous nucleotides detected in {}\n'.
+            format(100 - ACGT_fraction * 100, os.path.basename(infile)))
+
 
 def sys_call(syscmd):
-	'''runs a system command string in a subshell and exits with an error
-	message if the return code of the command was anything other than 0'''
-	with open(os.devnull) as dump: 
-		returncode = subprocess.call(syscmd, stdout=dump, stderr=dump,
-			shell=True)
-		if returncode != 0:
-			logging.error('failed sys_call ' + syscmd)
-			sys.stderr.write('ERROR: failed sys_call {}\n'.format(syscmd))
-			sys.exit(1)
+    '''runs a system command string in a subshell and exits with an error
+    message if the return code of the command was anything other than 0'''
+    with open(os.devnull) as dump:
+        returncode = subprocess.call(syscmd, stdout=dump, stderr=dump,
+                                     shell=True)
+        if returncode != 0:
+            logging.error('failed sys_call ' + syscmd)
+            sys.stderr.write('ERROR: failed sys_call {}\n'.format(syscmd))
+            sys.exit(1)
+
 
 def require_file_exists_and_test_empty(infile):
-	'''determines if an input file is present and exits with error message if
-	untrue; returns whether the file is empty'''
-	if os.path.exists(infile):
-		if os.stat(infile).st_size == 0:
-			return True
-		return False
-	else:
-		sys.stderr.write('ERROR: {} file absent\n'.format(infile))
-		sys.exit(1)
+    '''determines if an input file is present and exits with error message if
+    untrue; returns whether the file is empty'''
+    if os.path.exists(infile):
+        if os.stat(infile).st_size == 0:
+            return True
+        return False
+    sys.stderr.write('ERROR: {} file absent\n'.format(infile))
+    sys.exit(1)
 
-def translate_seq(nuclSeq):
-	'''use biopython to take in a nucleotide sequence (string) and
-	return a protein sequence'''
-	proteinSeq = Seq(nuclSeq, generic_dna).translate(cds=False, to_stop=False,
-		stop_symbol='*')
-	return proteinSeq
 
-def search_for_internal_stop_codon(candidate):
-	'''counts number of internal stop codons; requires sequence from database
-	to be in frame'''
-	if '-' in candidate[11]:
-		nucSeq = candidate[11].replace('-', '')
-	else:
-		nucSeq = candidate[11]
-	if int(int(candidate[8]) % 3) == 1:
-		frameStart = int(0)
-	elif int(int(candidate[8]) % 3) == 0:
-		frameStart = int(1)
-	elif int(int(candidate[8]) % 3) == 2:
-		frameStart = int(2)
-	if frameStart > 0:
-		nucSeq = nucSeq[frameStart:]
-	if len(nucSeq) % 3 == 0:
-		protein = translate_seq(nucSeq)
-	elif len(nucSeq) % 3 > 0:
-		protein = translate_seq(nucSeq[:-(len(nucSeq) % 3)])
-	else:
-		sys.stderr.write('ERROR: incorrect nucleotide length ({}) after'
-		' trimming\n'.format(len(nucSeq)))
-		sys.exit(1)
-	numInternalSTOPcodons = len(re.findall(r'\*[ABCDEFGHIKLMNPQRSTVWYZ]',
-		str(protein)))
-	return (protein, str(numInternalSTOPcodons))
+def translate_seq(nucl_seq):
+    '''use biopython to take in a nucleotide sequence (string) and
+    return a protein sequence (string)'''
+    protein_seq = str(Seq(nucl_seq, generic_dna).translate(
+        cds=False, to_stop=False, stop_symbol='*'))
+    return protein_seq
 
-def tag_hit(l, edge):
-	'''evaluates the alignment list l and returns a new list containing
-	shorthand labels denoting if an allele match was not full length or <100%,
-	if the alignment was at the edge of a contig, and if any internal stop
-	codons were predicted in the alignment'''
-	if int(l[5]) != int(l[7]):
-		# incomplete length; SRST2='? indicates that there was 
-		#   uncertainty in at least one of the alleles'
-		l = [l[0], l[1]+'?', l[2]+'?'] + l[3:13]
-	if int(l[5]) == int(l[7]) and int(l[4]) < 100:
-		# full length match but pident!=100%
-		# SRST2='* [...] indicates that there were mismatches against at least
-		#   one of the alleles. This suggests that you have a novel variant
-		#   [...] rather than a precise match'
-		l = [l[0], l[1]+'*', l[2]+'*'] + l[3:13]
-	if (int(l[8]) - edge) < 0:
-		# edge hits on left edge
-		if (int(l[7]) - int(l[9])) > 0:
-			# incomplete alignlen at edge for '$' designation
-			#   distinguishing ^ from $ is unnecessary
-			l = [l[0], l[1]+'$', l[2]+'$'] + l[3:13]
-	if (int(l[9]) + edge) > int(l[10]): 
-		# edge hits on right edge
-		if (int(l[7]) + int(l[8])) > int(l[10]):
-			# require incomplete alignlen
-			l = [l[0], l[1]+'$', l[2]+'$'] + l[3:13]
-	(prot, numSTOP) = search_for_internal_stop_codon(l)
-	if int(numSTOP) > 0:
-		# TR indicates 'truncated protein translation'
-		l = [l[0], l[1]+'TR', l[2]+'TR'] + l[3:13]
-	return l
+
+def count_internal_stop_codons(nucl_seq, qstart):
+    '''counts number of internal stop codons; requires sequence from database
+    to be in frame'''
+    if '-' in nucl_seq:
+        nucl_seq = nucl_seq.replace('-', '')
+    else:
+        nucl_seq = nucl_seq
+    if int(int(qstart) % 3) == 1:
+        frame_start = int(0)
+    elif int(int(qstart) % 3) == 0:
+        frame_start = int(1)
+    elif int(int(qstart) % 3) == 2:
+        frame_start = int(2)
+    if frame_start > 0:
+        nucl_seq = nucl_seq[frame_start:]
+    if len(nucl_seq) % 3 == 0:
+        protein = translate_seq(nucl_seq)
+    elif len(nucl_seq) % 3 > 0:
+        protein = translate_seq(nucl_seq[:-(len(nucl_seq) % 3)])
+    else:
+        sys.stderr.write('ERROR: incorrect nucleotide length ({}) after'
+                         ' trimming\n'.format(len(nucl_seq)))
+        sys.exit(1)
+    num_internal_stop_codons = len(
+        re.findall(r'\*[ABCDEFGHIKLMNPQRSTVWYZ]', protein))
+    return num_internal_stop_codons
+
+
+def tag_hit(d, edge):
+    '''evaluates the alignment d and returns the same structure containing
+    shorthand suffix labels denoting if an allele match was not full length or
+    <100%, if the alignment was at the edge of a contig, and if any internal
+    stop codons were predicted in the alignment'''
+    suffix = ''
+    if d['aln_len'] != d['qlen']:
+        # incomplete length; SRST2='? indicates that there was
+        #   uncertainty in at least one of the alleles'
+        suffix += '?'
+    if d['aln_len'] == d['qlen'] and d['perc_id'] < 100:
+        # full length match but pident!=100%
+        # SRST2='* [...] indicates that there were mismatches against at least
+        #   one of the alleles. This suggests that you have a novel variant
+        #   [...] rather than a precise match'
+        suffix += '*'
+    if (d['qstart'] - edge) < 0:
+        # edge hits on left edge
+        if (d['qlen'] - d['qend']) > 0:
+            # incomplete alignlen at edge for '$' designation
+            #   distinguishing ^ from $ is unnecessary
+            suffix += '$'
+    elif (d['qend'] + edge) > d['slen']:
+        # edge hits on right edge
+        if (d['qlen'] + d['qstart']) > d['slen']:
+            # require incomplete alignlen
+            suffix += '$'
+    num_stop_codons = count_internal_stop_codons(d['sseq'], d['qstart'])
+    if num_stop_codons > 0:
+        # TR indicates 'truncated protein translation'
+        suffix += 'TR'
+    if suffix:
+        d['AR_family'] = d['AR_family'] + suffix
+        d['AR_variant'] = d['AR_variant'] + suffix
+    return d
+
 
 def main():
-	args = parse_args()
-	outdir = os.path.realpath(os.path.expanduser(args.outdir))
-	genome = os.path.realpath(os.path.expanduser(args.genome))
-	database = os.path.realpath(os.path.expanduser(args.database))
-	similarity = args.similarity
-	if args.basename is not None:
-		baseGenome = args.basename
-	else:
-		baseGenome = os.path.splitext(os.path.basename(genome))[0]
-	if not os.path.exists(outdir): 
-		os.mkdir(outdir)
-	logging.basicConfig(
-		filename=os.path.join(outdir, 'c-SSTAR_{}.log'.format(baseGenome)),
-		format='%(asctime)s: %(levelname)s: %(message)s',
-		datefmt='%d-%m-%Y %I:%M:%S %p', level=logging.INFO)
-	logging.info('c-SSTAR version: {}'.format(__version__))
-	logging.info('user: {}'.format(pwd.getpwuid(os.getuid()).pw_name))
-	logging.info('release: {}'.format(os.uname()[3]))
-	logging.info('shell env: {}'.format(pwd.getpwuid(os.getuid()).pw_shell))
-	logging.info('cwd: {}'.format(pwd.getpwuid(os.getuid()).pw_dir))
-	logging.info('python version: {}'.format(sys.version))
-	logging.info(subprocess.check_output(
-		'command -v blastn', shell=True).rstrip())
-	logging.info(subprocess.check_output(
-		'blastn -version | tail -n 1', shell=True).rstrip())
-	sys_call('makeblastdb -in {} -out {} -dbtype nucl'.format(
-		genome, os.path.join(outdir, baseGenome)))
-	for x in ['.nin', '.nsq', '.nhr']:
-		empty = require_file_exists_and_test_empty(os.path.join(outdir,
-			baseGenome + x))
-		if empty:
-			sys.stderr.write('ERROR: failed making BLAST database to'
-				' search\n{} file empty\n'.format(
-				os.path.join(outdir, baseGenome + x)))
-			sys.exit(1)
-	sys_call('blastn -task blastn -query {0} -db {out} -out {out}.blastn.tsv'
-		' -evalue 1e-5 -max_target_seqs 1 -perc_identity {1} -culling_limit 1'
-		' -outfmt "6 qseqid sseqid pident length mismatch gaps qstart qend'
-		' sstart send evalue bitscore qlen slen sseq" -num_threads {2}'.\
-		format(database, similarity, args.cpus,
-			out=os.path.join(outdir, baseGenome)))
-	for x in ['.nin', '.nsq', '.nhr']:
-		os.remove(os.path.join(outdir, baseGenome + x))
-	empty = require_file_exists_and_test_empty(os.path.join(outdir,
-		baseGenome + '.blastn.tsv'))
-	if empty:
-		sys.stderr.write('INFO: no antimicrobial resistance genes detected\n')
-		sys.exit(0)
-	with open(os.path.join(outdir, baseGenome + '.blastn.tsv')) as infile:
-		best = ['-1','a','a','a',0,'-1','a',0,'a','a',0,'a']
-		currentClusterNr = '-1'
-		topHits = []
-		for l in infile:
-			blastOut = [x for x in l.split('\t')]
-			thresHold = (int(blastOut[12]) / 5 ) * 2
-			if int(blastOut[3]) > thresHold:
-				enzymeParts = [s for s in blastOut[0].split('__')]
-				clusterNr = enzymeParts[0]
-				ident, dec = blastOut[2].split('.')
-				pident = int(ident)
-				bitscore = blastOut[11]
-				candidate = [clusterNr, enzymeParts[1], enzymeParts[2],
-					blastOut[1], pident, blastOut[3], bitscore, blastOut[12],
-					blastOut[6], blastOut[7], blastOut[13],
-					blastOut[14].rstrip()]
-				if clusterNr == currentClusterNr:
-					if float(best[6]) < float(candidate[6]):
-						best = candidate
-				else:
-					if best[4] >= similarity:
-						topHits.append(best)
-					currentClusterNr = clusterNr
-					best = candidate
-		if best[4] >= similarity:
-			topHits.append(best)
-	for i in topHits:
-		hit = tag_hit(i, args.edge)
-		print(hit[1] + '\t' + hit[2] + '\t' + hit[3] + '\t' +
-			str(hit[4]) + '%\t' + str(hit[5]) + '\t' + str(hit[7]))
+    args = parse_args()
+    require_dependency('makeblastdb')
+    require_dependency('blastn')
+    tmp = mkdtemp()
+    # NOTE: convert infiles to dict but simple universal way in py2.7 and py3+
+    # to iterate items to pass to functions and reassign? iteritems() items()
+    infile_query = os.path.realpath(os.path.expanduser(args.genome))
+    if infile_query.endswith('.gz'):
+        infile_query = decompress_file(infile_query, tmp)
+    if infile_query.endswith(('.gbff', '.gbf', '.gbk', '.gb')):
+        infile_query = genbank_to_fasta(infile_query, tmp)
+    infile_db = os.path.realpath(os.path.expanduser(args.database))
+    if infile_db.endswith('.gz'):
+        infile_db = decompress_file(infile_db, tmp)
+    for file in [infile_db, infile_query]:
+        evaluate_nucleotide_composition(file, args.min_ACGT)
+    outdir = os.path.realpath(os.path.expanduser(args.outdir))
+    min_identity = args.min_identity
+    if args.basename is not None:
+        base_genome = args.basename
+    else:
+        base_genome = os.path.splitext(os.path.basename(infile_query))[0]
+    if not os.path.exists(outdir):
+        os.mkdir(outdir)
+    logging.basicConfig(
+        filename=os.path.join(outdir, 'c-SSTAR_{}.log'.format(base_genome)),
+        format='%(asctime)s: %(levelname)s: %(message)s',
+        datefmt='%d-%m-%Y %I:%M:%S %p', level=logging.INFO)
+    logging.info('c-SSTAR version: {}'.format(__version__))
+    logging.info('user: {}'.format(pwd.getpwuid(os.getuid()).pw_name))
+    logging.info('release: {}'.format(os.uname()[3]))
+    logging.info('shell env: {}'.format(pwd.getpwuid(os.getuid()).pw_shell))
+    logging.info('cwd: {}'.format(pwd.getpwuid(os.getuid()).pw_dir))
+    logging.info('python version: {}'.format(sys.version))
+    logging.info(subprocess.check_output(
+        'command -v blastn', shell=True).rstrip())
+    logging.info(subprocess.check_output(
+        'blastn -version | tail -n 1', shell=True).rstrip())
+    tmp_query_idx = os.path.join(outdir, base_genome)
+    sys_call('makeblastdb -in {} -out {} -dbtype nucl'.format(
+        infile_query, tmp_query_idx))
+    for x in ['.nin', '.nsq', '.nhr']:
+        empty = require_file_exists_and_test_empty(tmp_query_idx + x)
+        if empty:
+            sys.stderr.write(
+                'ERROR: failed making BLAST database to'
+                ' search\n{} file empty\n'.
+                format(os.path.join(outdir, base_genome + x)))
+            sys.exit(1)
+    sys_call(
+        'blastn -task blastn -query {} -db {} -out {} -evalue 1e-5'
+        ' -max_target_seqs 1 -perc_identity {} -culling_limit 1'
+        ' -outfmt "6 qseqid sseqid pident length mismatch gaps qstart qend'
+        ' sstart send evalue bitscore qlen slen sseq" -num_threads {}'.
+        format(infile_db, tmp_query_idx,
+               os.path.join(outdir, base_genome + '.blastn.tsv'),
+               min_identity, args.cpus))
+    shutil.rmtree(tmp)
+    empty = require_file_exists_and_test_empty(
+        os.path.join(outdir, base_genome + '.blastn.tsv'))
+    if empty:
+        sys.stderr.write('INFO: empty alignment output. No antimicrobial'
+                         ' resistance genes detected\n')
+        sys.exit(0)
+    with open(os.path.join(outdir, base_genome + '.blastn.tsv')) as infile:
+        # best = [-1, 'a', 'a', 'a', 0., 0, 0., 0, 0, 0, 0, 'a']
+        best = {
+            'clust_nr': -1,
+            'AR_family': 'a',
+            'AR_variant': 'a',
+            'qry_defln': 'a',
+            'perc_id': 0.,
+            'aln_len': 0,
+            'bits': 0.,
+            'qlen': 0,
+            'qstart': 0,
+            'qend': 0,
+            'slen': 0,
+            'sseq': 'a'}
+        current_cluster_number = -1
+        top_hits = []
+        for l in infile:
+            blast_out = [x for x in l.rstrip().split('\t')]
+            threshold = float(blast_out[12]) * (args.min_aln_frac / 100.)
+            if float(blast_out[3]) > threshold:
+                db_defline_parts = [s for s in blast_out[0].split('__')]
+                cluster_number = int(db_defline_parts[0])
+                pident = float(blast_out[2])
+                bitscore = float(blast_out[11])
+                candidate = {
+                    'clust_nr': cluster_number,
+                    'AR_family': str(db_defline_parts[1]),
+                    'AR_variant': str(db_defline_parts[2]),
+                    'qry_defln': str(blast_out[1]),
+                    'perc_id': pident,
+                    'aln_len': int(blast_out[3]),
+                    'bits': bitscore,
+                    'qlen': int(blast_out[12]),
+                    'qstart': int(blast_out[6]),
+                    'qend': int(blast_out[7]),
+                    'slen': int(blast_out[13]),
+                    'sseq': str(blast_out[14])}
+                if cluster_number == current_cluster_number:
+                    if best['bits'] < candidate['bits']:
+                        best = candidate
+                else:
+                    if best['perc_id'] >= min_identity:
+                        top_hits.append(best)
+                    current_cluster_number = cluster_number
+                    best = candidate
+        if best['perc_id'] >= min_identity:
+            top_hits.append(best)
+    if current_cluster_number == -1:
+        sys.stderr.write('INFO: all alignments in output do not meet'
+                         ' thresholds. No antimicrobial resistance genes'
+                         ' detected\n')
+        sys.exit(0)
+    output = []
+    for i in top_hits:
+        hit = tag_hit(i, args.edge)
+        output.append(hit['AR_family'] + '\t' + hit['AR_variant'] + '\t' +
+                      hit['qry_defln'] + '\t' + str(hit['perc_id']) + '%\t' +
+                      str(hit['aln_len']) + '\t' + str(hit['qlen']))
+    if args.report is not None:
+        report = os.path.realpath(os.path.expanduser(args.report))
+        if not os.path.exists(os.path.dirname(outdir)):
+            os.mkdir(os.path.dirname(outdir))
+        with open(report, 'w') as ofh:
+            ofh.write('\n'.join(output))
+    else:
+        for ln in output:
+            print(ln)
+
 
 if __name__ == '__main__':
-	main()
+    main()
