@@ -1,14 +1,12 @@
 # c-SSTAR
 ##### CLI-Sequence Search Tool for Antimicrobial Resistance
-*for those who lack a Java environment or are simply scared to dive into the deep abyss (GUI)*
-
 ![alt tag](https://github.com/chrisgulvik/images/raw/master/c-SSTAR.jpeg)
 
 
 ## System Requirements
 - Linux or Mac OS X platform
 - BLAST+ (blastn and makeblastdb)
-- Python 2.7 and Biopython
+- Python 2.7 or 3 with BioPython
 
 ## Usage
     c-SSTAR -g <genome_file> -d <database_file>
@@ -24,7 +22,7 @@ A tab-delimited summary is printed to standard out with the following fields:
 1. AR gene family (from database)
 2. AR gene variant (from database)
 3. sequence defline/header where the AR gene is located (from genome)
-4. % nucleotide similarity (from blastn output)
+4. % nucleotide identity (from blastn output)
 5. bp length of alignment (from blastn output)
 6. bp length of AR gene (from blastn output)
 
@@ -35,15 +33,14 @@ Columns 1 and 2 will have suffixes appended to denote special interest:
 - __$__ indicates gene detected at edge of contig
 
 #### II) Raw alignment output (OUTDIR/BASENAME.blastn.tsv)
-The tab-delimited outfmt 6 of blast is saved with two columns added to the right. Column 13 is the query length, and column 14 is the subject sequence.
+The tab-delimited outfmt 6 of blast is saved with three columns added to the right. Column 13 is the query (AR gene database) length, column 14 is the subject (contig) length, and column 15 is the subject (contig's AR gene) sequence.
 
 #### III) Log output (OUTDIR/c-SSTAR_BASENAME.log)
 A text file is generated to log the date and time of execution, user ID, shell environment, python version, blastn binary location, and blastn version.
 
 ## Example Install
-    cd $HOME
     pip install biopython
-    git clone https://github.com/chrisgulvik/c-SSTAR.git
+    git clone https://github.com/chrisgulvik/c-SSTAR.git $HOME
     echo 'export PATH="$PATH:$HOME/c-SSTAR"' >> $HOME/.bash_profile
 
 ## Example Usage
@@ -51,60 +48,49 @@ A text file is generated to log the date and time of execution, user ID, shell e
 ```bash
 for F in *.fna; do
   B=$(basename $F .fna)
-  c-SSTAR -g $F -b "$B"_ResGANNOT -d ~/AR/ResGANNOT_srst2.fasta -o AR/"$B" > AR/"$B"_ResGANNOT.tab
+  c-SSTAR -g $F -d ~/c-SSTAR/db/ResGANNOT_srst2.fasta.gz -o $B > "$B"_ResGANNOT.tab
 done
-```
-###### Filter for full-length hits without protein truncations
-```bash
-for F in *_ResGANNOT.tab; do
-  B=$(basename $F _ResGANNOT.tab)
-  echo -ne "$B\t" >> Summary_FullLength_AR_hits.tab
-  grep -v -e $'TR\t' -e '[Oo]mp' $F | awk '$5 == $6 {print $2}' | sed 's/[\?\*]//1' | tr '\n' ',' >> Summary_FullLength_AR_hits.tab
-  echo '' >> Summary_FullLength_AR_hits.tab
-done
-sed -i 's/,$//g' Summary_FullLength_AR_hits.tab
-```
-###### Filter for truncated porins
-```bash
-for F in *_ResGANNOT.tab; do
-  B=$(basename $F _ResGANNOT.tab)
-  echo -ne "$B\t" >> Summary_TruncatedPorins_AR_hits.tab
-  grep -P 'TR\t' $F | awk '/[Oo]mp/ && /TR\t/ {print $2}' | sed 's/[\?\*]//1' | tr '\n' ',' >> Summary_TruncatedPorins_AR_hits.tab
-  echo '' >> Summary_TruncatedPorins_AR_hits.tab
-done
-sed -i 's/TR$//g' Summary_TruncatedPorins_AR_hits.tab
-sed -i 's/,$//g' Summary_TruncatedPorins_AR_hits.tab
 ```
 
 ## Example Summary Output
-|AR_Family | AR_Variant | Query_Defline/Header | Similarity | Align_Len | DB_Gene_Len|
-|--------------------|---------|-----------------|-----------|---------|--------------|
-|AmpH_Bla* | AmpH* | SAMN04014950_3 | 98% | 1161 | 1161|
-|Aac3-Ib_AGly? | Aac3-Ib-Aac6-Ib? | SAMN04014950_94 | 99% | 554 | 1005|
-|MphA_MLS | MphA | SAMN04014950_85 | 100% | 906 | 906|
-|SHV-OKP-LEN_Bla | SHV-11 | SAMN04014950_2 | 100% | 861 | 861|
-|CTX-M-1_Bla | CTX-M-15 | SAMN04014950_84 | 100% | 876 | 876|
-|Aac3-IIa_AGly* | Aac3-IIa* | SAMN04014950_122 | 98% | 861 | 861|
-|TEM-1D_Bla* | TEM-105* | SAMN04014950_112 | 99% | 861 | 861|
-|SulI_Sul | SulI | SAMN04014950_91 | 100% | 840 | 840|
-|StrB_AGly* | StrB* | SAMN04014950_69 | 99% | 837 | 837|
-|AadA_AGly* | AadA2* | SAMN04014950_91 | 99% | 780 | 780|
-|OXA-1_Bla | OXA-1 | SAMN04014950_94 | 100% | 831 | 831|
-|SulII_Sul | SulII | SAMN04014950_69 | 100% | 816 | 816|
-|StrA_AGly* | StrA* | SAMN04014950_69 | 99% | 804 | 804|
-|QnrB_Flq? | QnrB1? | SAMN04014950_79 | 100% | 662 | 681|
-|CatA2_Phe* | CatA2* | SAMN04014950_101 | 96% | 642 | 642|
-|CatBx_Phe? | CatB4? | SAMN04014950_94 | 100% | 529 | 549|
-|DfrA_Tmt | DfrA12 | SAMN04014950_118 | 100% | 498 | 498|
-|DfrA5_Tmt | DfrA14 | SAMN04014950_116 | 100% | 474 | 474|
-|OmpK35-kpneumoniae* | ompK35* | SAMN04014950_14 | 99% | 1080 | 1080|
-|OmpK36-kpneumoniae*TR | ompK36*TR | SAMN04014950_1 | 99% | 1099 | 1099|
+```bash
+c-SSTAR -g ~/c-SSTAR/tests/data/SRR3112344.fa.gz \
+ -d ~/c-SSTAR/db/ResGANNOT_srst2.fasta.gz
+```
+| AR_Family | AR_Variant | Query_Defline | Identity | Aln_Len | DB_Gene_Len |
+| --------- | ---------------------- | ------------- | -------- | ------- | ----------- |
+| aac(3)* | aac(3)-IId* | tig093 | 99.884% | 861 | 861 |
+| aac(3)? | aac(3)-Ib-aac(6')-Ib'? | tig123 | 99.097% | 554 | 1005 |
+| aac(6') | aac(6')-Ib-cr | tig123 | 100.0% | 600 | 600 |
+| aac(6')? | aac(6')-30-aac(6')-Ib'? | tig123 | 99.309% | 579 | 987 |
+| aadA2? | aadA2? | tig104 | 99.875% | 802 | 819 |
+| ampH* | ampH* | tig003 | 98.88% | 1161 | 1161 |
+| aph(3'')* | aph(3'')-Ib* | tig096 | 99.876% | 804 | 804 |
+| aph(6)* | aph(6)-Id* | tig096 | 99.881% | 837 | 837 |
+| blaCTX | blaCTX-M-15 | tig089 | 100.0% | 876 | 876 |
+| blaOXA | blaOXA-1 | tig123 | 100.0% | 831 | 831 |
+| blaSHV | blaSHV-11 | tig016 | 100.0% | 861 | 861 |
+| blaSHV* | blaSHV-100* | tig016 | 95.111% | 900 | 900 |
+| blaTEM | blaTEM-1B | tig108 | 100.0% | 861 | 861 |
+| catA2* | catA2* | tig127 | 96.106% | 642 | 642 |
+| catB3?$ | catB3?$ | tig123 | 100.0% | 440 | 633 |
+| catB4?$ | catB4?$ | tig123 | 100.0% | 440 | 549 |
+| dfrA12 | dfrA12 | tig104 | 100.0% | 498 | 498 |
+| dfrA14* | dfrA14* | tig134 | 99.586% | 483 | 483 |
+| fosA6?$ | fosA6?$ | tig026 | 98.81% | 420 | 433 |
+| mph(A)?TR | mph(A)?TR | tig110 | 99.675% | 922 | 921 |
+| oqxA | oqxA | tig024 | 100.0% | 1176 | 1176 |
+| oqxB | oqxB | tig024 | 100.0% | 3153 | 3153 |
+| qnrB1*TR | qnrB1*TR | tig080 | 99.853% | 681 | 681 |
+| sul1* | sul1* | tig104 | 99.885% | 867 | 867 |
+| sul2 | sul2 | tig096 | 100.0% | 816 | 816 |
+| tet(D) | tet(D) | tig108 | 100.0% | 1185 | 1185 |
 
 ### Literature References
-[_SSTAR_](https://www.ncbi.nlm.nih.gov/pmc/articles/PMC4863618/): de Man TJB, Limbago BM. 2016. SSTAR, a stand-alone easy-to-use antimicrobial resistance gene predictor. mSphere 1(1): e00050-15. doi: 10.1128/mSphere.00050-15
-
 [_c-SSTAR_](https://www.ncbi.nlm.nih.gov/pmc/articles/PMC5442553/): Cunningham SA, Limbago B, Traczewski M, Anderson K, Hackel M, Hindler J, Sahm D, Alyanak E, Lawsin A, Gulvik CA, de Man TJB, Mandrekar JN, Schuetz AN, Jenkins S, Humphries R, Palavecino E, Vasoo S, Patel R. 2017. Multicenter Performance Assessment of Carba NP Test. J Clin Microbiol 55(6):1954-1960. doi: 10.1128/JCM.00244-17
 
-[_the ARG-ANNOT database_](https://www.ncbi.nlm.nih.gov/pmc/articles/PMC3910750/): Gupta SK, Padmanabhan BR, Diene SM, Lopez-Rojas R, Kempf M, Landraud L, Rolain J-M. 2014. ARG-ANNOT (Antibiotic Resistance Gene-ANNOTation), a new bioinformatic tool to discover antibiotic resistance genes in bacterial genomes. Antimicrobial Agents and Chemotherapy 58:212–220. doi: 10.1128/AAC.01310-13
+[_SSTAR_](https://www.ncbi.nlm.nih.gov/pmc/articles/PMC4863618/): de Man TJB, Limbago BM. 2016. SSTAR, a stand-alone easy-to-use antimicrobial resistance gene predictor. mSphere 1(1): e00050-15. doi: 10.1128/mSphere.00050-15
 
-[_the ResFinder database_](https://www.ncbi.nlm.nih.gov/pmc/articles/PMC3468078/): Zankari E, Hasman H, Cosentino S, Vestergaard M, Rasmussen S, Lund O, Aarestrup F, Larsen MV. 2012. Identification of acquired antimicrobial resistance genes. Journal of Antimicrobial Chemotherapy 67:2640–2644. doi: 10.1093/jac/dks261
+[_ARG-ANNOT database_](https://www.ncbi.nlm.nih.gov/pmc/articles/PMC3910750/): Gupta SK, Padmanabhan BR, Diene SM, Lopez-Rojas R, Kempf M, Landraud L, Rolain J-M. 2014. ARG-ANNOT (Antibiotic Resistance Gene-ANNOTation), a new bioinformatic tool to discover antibiotic resistance genes in bacterial genomes. Antimicrobial Agents and Chemotherapy 58:212–220. doi: 10.1128/AAC.01310-13
+
+[_ResFinder database_](https://www.ncbi.nlm.nih.gov/pmc/articles/PMC3468078/): Zankari E, Hasman H, Cosentino S, Vestergaard M, Rasmussen S, Lund O, Aarestrup F, Larsen MV. 2012. Identification of acquired antimicrobial resistance genes. Journal of Antimicrobial Chemotherapy 67:2640–2644. doi: 10.1093/jac/dks261
