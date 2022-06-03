@@ -1,0 +1,41 @@
+[build-system]
+requires = ['flit']
+build-backend = 'flit_core.buildapi'
+
+[tool.flit.metadata]
+module = 'csstar'
+author = 'Christopher A. Gulvik'
+author-email = 'submit-github-issue@missing.net'
+home-page = 'https://github.com/chrisgulvik/c-SSTAR'
+description-file = 'README.md'
+classifiers = [
+    'Development Status :: 5 - Production/Stable',
+    'Environment :: Console',
+    'Intended Audience :: Science/Research',
+    'License :: OSI Approved :: Apache Software License',
+    'Natural Language :: English',
+    'Programming Language :: Python :: 2.7',
+    'Topic :: Scientific/Engineering :: Bio-Informatics'
+]
+requires = [
+    'biopython>=1.68',
+    'setuptools'
+]
+
+[tool.flit.metadata.requires-extra]
+tests = [
+    'flake8',
+    'pytest',
+    'pytest-cov'
+]
+
+[tool.flit.metadata.urls]
+'Bug Tracker' = 'https://github.com/chrisgulvik/c-SSTAR/issues'
+'Continuous Integration' = 'https://github.com/chrisgulvik/c-SSTAR/actions'
+'Documentation' = 'https://github.com/chrisgulvik/c-SSTAR/blob/master/README.md'
+'Release Versions' = 'https://github.com/chrisgulvik/c-SSTAR/releases'
+
+[tool.semantic_release]
+version_variable = 'open("VERSION").readline().strip()'
+build_command = 'python -m pip install flit && flit build'
+

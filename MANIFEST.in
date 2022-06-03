@@ -1,0 +1,4 @@
+include VERSION
+include LICENSE
+include docs/*
+recursive-include csstar/data *

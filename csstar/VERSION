@@ -1,0 +1,30 @@
+2.1.0
+Added:
+    --debug option added (off by default)
+Changed:
+    re-organized github repo from single c-SSTAR script to csstar package for pip installation
+
+2.0.0
+Added:
+    automatically detects input file format from filename; now allows GunZip compressed GenBank and FastA
+    blastn system call by default uses all CPUs available
+    minimum alignment fraction default unchanged (40%) but new --aln-fraction option allows a user to change the threshold
+    tests input argument values are within relevant ranges
+    summary tab-delimited report default unchaged (stdout) but new --report option to specify outfile
+    new option to verify input genome is nucleotide composition with --min-ACGT
+Changed:
+    --similarity option removed and replaced with --identity option with same default (95%)
+    clarified data fields parsed by converting lists to dictionary
+    camelcase of variable names removed, no longer following the Java vars written for the SSTAR GUI
+    PEP8 compliant according to flake8 tests
+
+1.2
+Added:
+    opt to print version number
+    opt to provide the output file's basename
+    new feature that identifies truncated porins and AR gene determinants
+Revised:
+    readme file to explain filtering output for full-length variant identification and for discovering non-functional (truncated) porin sequences
+
+1.0
+initial release of command-line version of Tom's SSTAR Java GUI
